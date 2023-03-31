@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/elarodas/slices"
+	"github.com/ElarOdas/slices"
 )
 
 // Test for Concurrency aka Run 100x: Test if there are unseen Race conditions
