@@ -5,27 +5,26 @@ import (
 	"sync"
 )
 
-var routineCap int = 5
+var RoutineCap int = 5
 
-func SetRoutineCap(newCap int) {
-	routineCap = newCap
-}
-
-// Map
-func MapSlice[T, R any](Tslice []T, f func(T) R) []R {
-	if len(Tslice) == 0 {
+// Map every item of the slice using the mapFunc
+func MapSlice[T, R any](slice []T, mapFunc func(T) R) []R {
+	if len(slice) == 0 {
 		return []R{}
 	}
-	control := make(chan struct{}, routineCap)
-	var wg sync.WaitGroup
-	newBList := make([]R, len(Tslice))
-
-	for i, elem := range Tslice {
-		control <- struct{}{}
+	var (
+		wg                sync.WaitGroup
+		countingSemaphore = make(chan struct{}, RoutineCap)
+		newBList          = make([]R, len(slice))
+	)
+	for i, elem := range slice {
+		i := i
+		elem := elem
+		countingSemaphore <- struct{}{}
 		wg.Add(1)
 		go func(i int, elem T) {
-			newBList[i] = f(elem)
-			<-control
+			newBList[i] = mapFunc(elem)
+			<-countingSemaphore
 			wg.Done()
 		}(i, elem)
 	}
@@ -33,47 +32,47 @@ func MapSlice[T, R any](Tslice []T, f func(T) R) []R {
 	return newBList
 }
 
-type concurrentSliceItem[T any] struct {
+type concurrentItem[T any] struct {
 	index int
 	value T
 }
 
-// Filter
-func FilterSlice[T any](Tslice []T, f func(T) bool) []T {
-	if len(Tslice) == 0 {
+// * We need concurrentItem to reorder the filtered slice
+// Filter every item of the slice using the filterFunc
+func FilterSlice[T any](slice []T, filterFunc func(T) bool) []T {
+	if len(slice) == 0 {
 		return []T{}
 	}
-	var wg sync.WaitGroup
-	control := make(chan struct{}, routineCap)
-	out := make(chan concurrentSliceItem[T], len(Tslice))
+	var (
+		wg                  sync.WaitGroup
+		countingSemaphore   = make(chan struct{}, RoutineCap)
+		concurrentItemsChan = make(chan concurrentItem[T], len(slice))
+	)
 
-	for i, elem := range Tslice {
-		control <- struct{}{}
+	for i, elem := range slice {
+		i := i
+		elem := elem
+		countingSemaphore <- struct{}{}
 		wg.Add(1)
 		go func(i int, elem T) {
-			if f(elem) {
-				out <- concurrentSliceItem[T]{i, elem}
+
+			if filterFunc(elem) {
+				concurrentItemsChan <- concurrentItem[T]{i, elem}
 			}
-			<-control
+			<-countingSemaphore
 			wg.Done()
 		}(i, elem)
 	}
 	wg.Wait()
-	close(out)
+	close(concurrentItemsChan)
 
-	var outList = chanToList(out)
-
-	sort.Slice(outList, func(i, j int) bool {
-		return outList[i].index < outList[j].index
-	})
-	result := make([]T, len(outList))
-	for i := range outList {
-		result[i] = outList[i].value
-	}
+	var concurrentSlice = chanToConcurrentSlice(concurrentItemsChan)
+	result := concurrentSliceToSlice(concurrentSlice)
 	return result
 }
 
-func chanToList[T any](c chan T) []T {
+// Extract the slice of concurrentItems from chan
+func chanToConcurrentSlice[T any](c chan T) []T {
 	var result = make([]T, 0)
 	for elem := range c {
 		result = append(result, elem)
@@ -81,78 +80,109 @@ func chanToList[T any](c chan T) []T {
 	return result
 }
 
-// Reduce
-func OrderdReduceSlice[T, R any](Tslice []T, reduction func(element T, basis R) R, zero R) R {
-	if len(Tslice) == 0 {
-		return zero
-	}
-	result := zero
-	for _, element := range Tslice {
-		result = reduction(element, result)
+// Reorder the slice and extract
+func concurrentSliceToSlice[T any](concurrentSlice []concurrentItem[T]) []T {
+	result := make([]T, len(concurrentSlice))
+
+	sort.Slice(concurrentSlice, func(i, j int) bool {
+		return concurrentSlice[i].index < concurrentSlice[j].index
+	})
+	for i := range concurrentSlice {
+		result[i] = concurrentSlice[i].value
 	}
 	return result
 }
 
-func UnorderedReduceSlice[T, R any](Tslice []T, reduction func(element T, basis R) R, zero R) R {
-	if len(Tslice) == 0 {
+// Reduce slice to single value using the reduceFunc
+// Order of reduction matters
+func OrderedReduceSlice[T, R any](slice []T, reduceFunc func(element T, basis R) R, zero R) R {
+	if len(slice) == 0 {
 		return zero
 	}
 	result := zero
-	var wg sync.WaitGroup
-	control := make(chan struct{}, routineCap)
-	mutex := make(chan struct{}, 1)
+	for _, element := range slice {
+		result = reduceFunc(element, result)
+	}
+	return result
+}
 
-	for _, element := range Tslice {
-		control <- struct{}{}
+// Reduce slice to single value using the reduceFunc
+// Order of reduction does not matter
+func UnorderedReduceSlice[T, R any](slice []T, reduceFunc func(element T, basis R) R, zero R) R {
+	if len(slice) == 0 {
+		return zero
+	}
+	var (
+		wg                sync.WaitGroup
+		countingSemaphore = make(chan struct{}, RoutineCap)
+		mutex             = make(chan struct{}, 1)
+		result            = zero
+	)
+
+	for _, elem := range slice {
+		elem := elem
+		countingSemaphore <- struct{}{}
 		wg.Add(1)
 		go func(element T) {
 			mutex <- struct{}{}
-			result = reduction(element, result)
+			result = reduceFunc(element, result)
 			<-mutex
-			<-control
+			<-countingSemaphore
 			wg.Done()
-		}(element)
+		}(elem)
 	}
 	wg.Wait()
 	return result
 }
 
-// ? Consider coupling every and some
-// Every
-func EverySlice[T any](Tslice []T, tester func(element T) bool) bool {
-	result := true
-	var wg sync.WaitGroup
-	control := make(chan struct{}, routineCap)
-	for _, element := range Tslice {
-		control <- struct{}{}
+// Every item fulfils isXFunc criteria
+func EverySlice[T any](slice []T, isXFunc func(element T) bool) bool {
+	if len(slice) == 0 {
+		return false
+	}
+	var (
+		wg                sync.WaitGroup
+		countingSemaphore = make(chan struct{}, RoutineCap)
+		result            = true
+	)
+
+	for _, elem := range slice {
+		elem := elem
+		countingSemaphore <- struct{}{}
 		wg.Add(1)
 		go func(element T) {
-			if result && !tester(element) {
+			if result && !isXFunc(element) {
 				result = false
 			}
-			<-control
+			<-countingSemaphore
 			wg.Done()
-		}(element)
+		}(elem)
 	}
 	wg.Wait()
 	return result
 }
 
-// Some
-func SomeSlice[T any](Tslice []T, tester func(element T) bool) bool {
-	result := false
-	var wg sync.WaitGroup
-	control := make(chan struct{}, routineCap)
-	for _, element := range Tslice {
+// Some items fulfil isXFunc criteria
+func SomeSlice[T any](slice []T, isXFunc func(element T) bool) bool {
+	if len(slice) == 0 {
+		return false
+	}
+	var (
+		wg      sync.WaitGroup
+		control = make(chan struct{}, RoutineCap)
+		result  = false
+	)
+	for _, elem := range slice {
+		elem := elem
 		control <- struct{}{}
 		wg.Add(1)
 		go func(element T) {
-			if !result && tester(element) {
+			if !result && isXFunc(element) {
 				result = true
 			}
 			<-control
 			wg.Done()
-		}(element)
+		}(elem)
 	}
 	wg.Wait()
 	return result
