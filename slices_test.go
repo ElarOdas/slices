@@ -1,6 +1,7 @@
 package slices_test
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -41,7 +42,8 @@ var (
 
 func TestConcurrencyMap(t *testing.T) {
 	for i := 0; i < 100; i++ {
-		result := slices.MapSlice(intSource, strconv.Itoa)
+		result, _ := slices.MapSlice(intSource, func(i int) (string, error) { return strconv.Itoa(i), nil })
+
 		if !reflect.DeepEqual(result, strConvMapTarget) {
 			t.Fail()
 			break
@@ -51,8 +53,8 @@ func TestConcurrencyMap(t *testing.T) {
 
 func TestConcurrencyFilter(t *testing.T) {
 	for i := 0; i < 100; i++ {
-		result := slices.FilterSlice(intSource, func(i int) bool {
-			return (i >= 30)
+		result, _ := slices.FilterSlice(intSource, func(i int) (bool, error) {
+			return i >= 30, nil
 		})
 		if !reflect.DeepEqual(result, filter30Target) {
 			t.Fail()
@@ -62,8 +64,8 @@ func TestConcurrencyFilter(t *testing.T) {
 }
 func TestConcurrencyReduce(t *testing.T) {
 	for i := 0; i < 100; i++ {
-		result := slices.UnorderedReduceSlice(intSource, func(i int, base int) int {
-			return base + i
+		result, _ := slices.UnorderedReduceSlice(intSource, func(i int, base int) (int, error) {
+			return base + i, nil
 		}, 0)
 		if result != reduceTarget {
 			t.Fail()
@@ -75,8 +77,8 @@ func TestConcurrencyReduce(t *testing.T) {
 func TestConcurrencyEvery(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		// 50 Tests for true
-		result := slices.EverySlice(intSource, func(i int) bool {
-			return i > 0
+		result, _ := slices.EverySlice(intSource, func(i int) (bool, error) {
+			return i > 0, nil
 		})
 		if !result {
 			t.Fail()
@@ -85,8 +87,8 @@ func TestConcurrencyEvery(t *testing.T) {
 	}
 	for i := 0; i < 50; i++ {
 		// 50 Tests for false
-		result := slices.EverySlice(intSource, func(i int) bool {
-			return i > 50
+		result, _ := slices.EverySlice(intSource, func(i int) (bool, error) {
+			return i > 50, nil
 		})
 		if result {
 			t.Fail()
@@ -97,8 +99,8 @@ func TestConcurrencyEvery(t *testing.T) {
 func TestConcurrencySome(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		// 50 Tests for true
-		result := slices.SomeSlice(intSource, func(i int) bool {
-			return i > 50
+		result, _ := slices.SomeSlice(intSource, func(i int) (bool, error) {
+			return i > 50, nil
 		})
 		if !result {
 			t.Fail()
@@ -107,8 +109,8 @@ func TestConcurrencySome(t *testing.T) {
 	}
 	for i := 0; i < 50; i++ {
 		// 50 Tests for true
-		result := slices.SomeSlice(intSource, func(i int) bool {
-			return i < 0
+		result, _ := slices.SomeSlice(intSource, func(i int) (bool, error) {
+			return i < 0, nil
 		})
 		if result {
 			t.Fail()
@@ -179,16 +181,16 @@ var (
 )
 
 func TestComplexMap(t *testing.T) {
-	result := slices.MapSlice(complexSource, func(elem testStruct) string {
-		return fmt.Sprintf("%s%d", elem.name, (elem.a + elem.b))
+	result, _ := slices.MapSlice(complexSource, func(elem testStruct) (string, error) {
+		return fmt.Sprintf("%s%d", elem.name, (elem.a + elem.b)), nil
 	})
 	if !reflect.DeepEqual(result, complexMapTarget) {
 		t.Fail()
 	}
 }
 func TestComplexFilter(t *testing.T) {
-	result := slices.FilterSlice(complexSource, func(elem testStruct) bool {
-		return elem.a+elem.b >= 80
+	result, _ := slices.FilterSlice(complexSource, func(elem testStruct) (bool, error) {
+		return elem.a+elem.b >= 80, nil
 	})
 	if !reflect.DeepEqual(result, complexFilterTarget) {
 		t.Fail()
@@ -196,28 +198,28 @@ func TestComplexFilter(t *testing.T) {
 }
 
 func TestComplexOrderedReduce(t *testing.T) {
-	result := slices.OrderedReduceSlice(complexSource, func(elem testStruct, base int) int {
-		return base + elem.a + elem.b
+	result, _ := slices.OrderedReduceSlice(complexSource, func(elem testStruct, base int) (int, error) {
+		return base + elem.a + elem.b, nil
 	}, 0)
 	if result != complexReduceTarget {
 		t.Fail()
 	}
 }
 func TestComplexUnorderedReduce(t *testing.T) {
-	result := slices.UnorderedReduceSlice(complexSource, func(elem testStruct, base int) int {
-		return base + elem.a + elem.b
+	result, _ := slices.UnorderedReduceSlice(complexSource, func(elem testStruct, base int) (int, error) {
+		return base + elem.a + elem.b, nil
 	}, 0)
 	if result != complexReduceTarget {
 		t.Fail()
 	}
 }
 func TestComplexEvery(t *testing.T) {
-	resultTrue := slices.EverySlice(complexSource, func(elem testStruct) bool {
-		return elem.a > 0
+	resultTrue, _ := slices.EverySlice(complexSource, func(elem testStruct) (bool, error) {
+		return elem.a > 0, nil
 	})
 
-	resultFalse := slices.EverySlice(complexSource, func(elem testStruct) bool {
-		return elem.a > 50
+	resultFalse, _ := slices.EverySlice(complexSource, func(elem testStruct) (bool, error) {
+		return elem.a > 50, nil
 	})
 	if resultFalse || !resultTrue {
 		t.Fail()
@@ -225,11 +227,11 @@ func TestComplexEvery(t *testing.T) {
 
 }
 func TestComplexSome(t *testing.T) {
-	resultTrue := slices.SomeSlice(complexSource, func(elem testStruct) bool {
-		return elem.a > 50
+	resultTrue, _ := slices.SomeSlice(complexSource, func(elem testStruct) (bool, error) {
+		return elem.a > 50, nil
 	})
-	resultFalse := slices.SomeSlice(complexSource, func(elem testStruct) bool {
-		return elem.a < 0
+	resultFalse, _ := slices.SomeSlice(complexSource, func(elem testStruct) (bool, error) {
+		return elem.a < 0, nil
 	})
 
 	if resultFalse || !resultTrue {
@@ -253,46 +255,46 @@ var (
 )
 
 func TestEmptyMap(t *testing.T) {
-	result := slices.MapSlice(emptyIntSlice, func(i int) string {
-		return ""
+	result, _ := slices.MapSlice(emptyIntSlice, func(i int) (string, error) {
+		return "", nil
 	})
 	if !reflect.DeepEqual(result, emptyStringSlice) {
 		t.Fail()
 	}
 }
 func TestEmptyFilter(t *testing.T) {
-	result := slices.FilterSlice(emptyIntSlice, func(i int) bool { return true })
+	result, _ := slices.FilterSlice(emptyIntSlice, func(i int) (bool, error) { return true, nil })
 	if !reflect.DeepEqual(result, emptyIntSlice) {
 		t.Fail()
 	}
 }
 func TestEmptyOrderedReduce(t *testing.T) {
-	result := slices.OrderedReduceSlice(emptyIntSlice, func(i int, basis int) int {
-		return basis + i
+	result, _ := slices.OrderedReduceSlice(emptyIntSlice, func(i int, basis int) (int, error) {
+		return basis + i, nil
 	}, 0)
 	if result != 0 {
 		t.Fail()
 	}
 }
 func TestEmptyUnorderedReduce(t *testing.T) {
-	result := slices.UnorderedReduceSlice(emptyIntSlice, func(i int, basis int) int {
-		return basis + i
+	result, _ := slices.UnorderedReduceSlice(emptyIntSlice, func(i int, basis int) (int, error) {
+		return basis + i, nil
 	}, 0)
 	if result != 0 {
 		t.Fail()
 	}
 }
 func TestEmptyEvery(t *testing.T) {
-	result := slices.SomeSlice(emptyIntSlice, func(i int) bool {
-		return i > 50
+	result, _ := slices.EverySlice(emptyIntSlice, func(i int) (bool, error) {
+		return i > 50, nil
 	})
 	if result {
 		t.Fail()
 	}
 }
 func TestEmptySome(t *testing.T) {
-	result := slices.SomeSlice(emptyIntSlice, func(i int) bool {
-		return i > 50
+	result, _ := slices.SomeSlice(emptyIntSlice, func(i int) (bool, error) {
+		return i > 50, nil
 	})
 	if result {
 		t.Fail()
@@ -300,3 +302,175 @@ func TestEmptySome(t *testing.T) {
 }
 
 // ? Tests for errors should be included
+
+var errorSource = []string{
+	"a",
+	"b",
+	"x",
+	"56",
+	"2",
+}
+
+var errorMapTarget = func() []int {
+	var result = make([]int, len(errorSource))
+	for i, element := range errorSource {
+		num, err := strconv.Atoi(element)
+		if err != nil {
+			continue
+		}
+		result[i] = num
+	}
+	return result
+}()
+
+var errorFilterTarget = func() []string {
+	var result []string
+	for _, element := range errorSource {
+		num, err := strconv.Atoi(element)
+		if err != nil || num <= 3 {
+			continue
+		}
+
+		result = append(result, element)
+	}
+	return result
+}()
+
+var errorReduceTarget = func() int {
+	var result int
+	for _, element := range errorSource {
+		num, err := strconv.Atoi(element)
+		if err != nil {
+			continue
+		}
+		result += num
+	}
+	return result
+}()
+
+func TestMapError(t *testing.T) {
+	result, err := slices.MapSlice(errorSource, strconv.Atoi)
+
+	var numErr *strconv.NumError
+
+	if !errors.As(err, &numErr) {
+		t.Fail()
+	}
+	if !reflect.DeepEqual(result, errorMapTarget) {
+		t.Fail()
+	}
+}
+
+func TestFilterError(t *testing.T) {
+	result, err := slices.FilterSlice(errorSource, func(s string) (bool, error) {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return false, err
+		}
+		return i > 3, err
+	})
+	var numErr *strconv.NumError
+	if !errors.As(err, &numErr) {
+		t.Fail()
+	}
+	if !reflect.DeepEqual(result, errorFilterTarget) {
+		t.Fail()
+	}
+}
+
+func TestOrderedReduceError(t *testing.T) {
+	result, err := slices.OrderedReduceSlice(errorSource, func(s string, base int) (int, error) {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return base, err
+		}
+		return base + i, err
+	}, 0)
+	var numErr *strconv.NumError
+	if !errors.As(err, &numErr) {
+		t.Fail()
+	}
+	if !reflect.DeepEqual(result, errorReduceTarget) {
+		t.Error(result, errorReduceTarget)
+	}
+}
+func TestUnorderedReduceError(t *testing.T) {
+	result, err := slices.UnorderedReduceSlice(errorSource, func(s string, base int) (int, error) {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return base, err
+		}
+		return base + i, err
+	}, 0)
+	var numErr *strconv.NumError
+	if !errors.As(err, &numErr) {
+		t.Fail()
+	}
+	if !reflect.DeepEqual(result, errorReduceTarget) {
+		t.Fail()
+	}
+}
+
+func TestEveryError(t *testing.T) {
+	var numErr *strconv.NumError
+	// Test true
+	resultTrue, err := slices.EverySlice(errorSource, func(s string) (bool, error) {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return false, err
+		}
+		return i > 1, err
+	})
+	if !errors.As(err, &numErr) {
+		t.Fail()
+	}
+	if !resultTrue {
+		t.Fail()
+	}
+	// Test false
+	resultFalse, err := slices.EverySlice(errorSource, func(s string) (bool, error) {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return false, err
+		}
+		return i > 3, err
+	})
+	if !errors.As(err, &numErr) {
+		t.Fail()
+	}
+	if resultFalse {
+		t.Fail()
+	}
+
+}
+func TestSomeError(t *testing.T) {
+	var numErr *strconv.NumError
+	// Test true
+	resultTrue, err := slices.SomeSlice(errorSource, func(s string) (bool, error) {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return false, err
+		}
+		return i > 1, err
+	})
+	if !errors.As(err, &numErr) {
+		t.Fail()
+	}
+	if !resultTrue {
+		t.Fail()
+	}
+	// Test false
+	resultFalse, err := slices.SomeSlice(errorSource, func(s string) (bool, error) {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return false, err
+		}
+		return i < -1, err
+	})
+	if !errors.As(err, &numErr) {
+		t.Fail()
+	}
+	if resultFalse {
+		t.Fail()
+	}
+}

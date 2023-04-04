@@ -35,6 +35,7 @@ Feel free to fork the project! For now I can not guarantee further work on this 
 ### Use
 
 This package is currently highly experimental and should not be used in a production environment.
+The new version 0.2 implements errors.
 
 ### Test
 
@@ -44,5 +45,4 @@ Right now no testing is implemented, but I intend to add testing at a later poin
 
 -   more extensive documentation
 -   example project (see tests for now)
--   better error handling
     Right now I am busy with my [master thesis]().
