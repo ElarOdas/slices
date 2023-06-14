@@ -1,3 +1,3 @@
-module github.com/ElarOdas/slices
+module github.com/PVolpert/slices
 
 go 1.20
